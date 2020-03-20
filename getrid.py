@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import subprocess
 from curses import wrapper
 
@@ -6,17 +7,11 @@ import urwid
 
 from pacgraph import Arch, human_si, packs_by_size, toplevel_packs
 
-to_remove = []
-keep = []
 
-
-def get_package_list():
-    arch = Arch()
-    tree = arch.local_load()
-    strings = []
-    for s, n in packs_by_size(tree, toplevel_packs(tree)):
-        strings.append("%s %s" % (human_si(s), n))
-    return strings
+def get_package_list(keep):
+    tree = Arch().local_load()
+    packages = packs_by_size(tree, toplevel_packs(tree))
+    return filter(lambda pkg: pkg[1] not in keep, packages)
 
 
 def get_info(softwarename):
@@ -24,48 +19,39 @@ def get_info(softwarename):
     return subp.stdout
 
 
-def hide(button, name):
-    if name in keep:
-        keep.remove(name)
-        button.set_state("")
-    else:
-        keep.append(name)
-        button.set_state("keep")
+class PkgButton(urwid.Button):
+    def __init__(self, package):
+        self.pkgSize = package[0]
+        self.pkgName = package[1]
+        label = "{} {}".format(human_si(self.pkgSize), self.pkgName)
+        super().__init__(label)
 
+    def connect_signal(self, call):
+        urwid.connect_signal(self, "click", call, self.pkgName)
 
-def on_click(button, choice):
-    size, name = choice.split()
-    if name in to_remove:
-        to_remove.remove(name)
-        button.set_state("")
-    else:
-        to_remove.append(name)
-        button.set_state("rm")
-
-
-def menu(title, choices):
-    body = [urwid.Text(title), urwid.Divider()]
-    for c in choices:
-        button = Button(c)
-        urwid.connect_signal(button, "click", on_click, c)
-        body.append(urwid.AttrMap(button, None, focus_map="reversed"))
-    return urwid.ListBox(urwid.SimpleFocusListWalker(body))
-
-
-class Button(urwid.Button):
     def set_state(self, state):
         self.set_label((state, self.label))
 
 
 class Tui:
+    to_remove = []
+    keep = []
     palette = [
         ("reversed", "standout", ""),
         ("rm", "black", "dark red"),
         ("keep", "light gray", "dark blue"),
     ]
 
-    def __init__(self):
-        self.main = urwid.Padding(menu("Title", get_package_list()), left=2, right=2)
+    def __init__(self, keep=[]):
+        self.keep = keep
+        body = [urwid.Text("Packages"), urwid.Divider()]
+        packages = get_package_list(keep)
+        for pkg in packages:
+            button = PkgButton(pkg)
+            button.connect_signal(self.mark_for_deletion)
+            body.append(urwid.AttrMap(button, None, focus_map="reversed"))
+        self.list = urwid.ListBox(urwid.SimpleFocusListWalker(body))
+        self.main = urwid.Padding(self.list, left=2, right=2)
         self.info = urwid.Text("")
         self.right = urwid.Filler(self.info, "top")
         self.cols = urwid.Columns([self.main, self.right])
@@ -82,8 +68,8 @@ class Tui:
     def get_selected(self):
         return self.main.base_widget.get_focus_widgets()[0].base_widget
 
-    def get_selected_text(self):
-        return self.get_selected().label.split()[1]
+    def get_selected_pkg(self):
+        return self.get_selected().pkgName
 
     def show_text(self, text):
         self.info.set_text(text)
@@ -96,13 +82,48 @@ class Tui:
             tui.exit()
 
         button = tui.get_selected()
-        name = tui.get_selected_text()
+        name = tui.get_selected_pkg()
         if key == "right":
             self.show_text(get_info(name))
         elif key == "h":
-            hide(button, name)
+            self.hide(button, name)
+
+    def toggle_state(self, button, name, stateset, state):
+        if name in stateset:
+            stateset.remove(name)
+            button.set_state("")
+        else:
+            stateset.append(name)
+            button.set_state(state)
+
+    def hide(self, button, name):
+        self.toggle_state(button, name, self.keep, "keep")
+
+    def mark_for_deletion(self, button, name):
+        self.toggle_state(button, name, self.to_remove, "rm")
 
 
-tui = Tui()
-tui.run()
-print(to_remove)
+if __name__ == "__main__":
+    home = os.path.expanduser("~")
+    conf_file = os.path.join(home, ".keep")
+    try:
+        with open(conf_file) as file:
+            keep = file.readlines()
+            keep = [x.strip() for x in keep]
+    except OSError:
+        keep = []
+
+    tui = Tui(keep)
+    tui.run()
+
+    with open(conf_file, "w") as file:
+        file.write("\n".join(tui.keep))
+
+    if len(tui.to_remove) > 0:
+        print()
+        print("Selected for removal: " + " ".join(tui.to_remove))
+        if input("Remove packages? [y/N] ").lower() == "y":
+            if os.geteuid() != 0:
+                subprocess.run(["sudo", "pacman", "-Rs", *tui.to_remove])
+            else:
+                subprocess.run(["pacman", "-Rs", *tui.to_remove])
