@@ -2,6 +2,8 @@
 import os
 import subprocess
 from curses import wrapper
+from functools import lru_cache
+from shutil import get_terminal_size
 
 import urwid
 
@@ -14,8 +16,11 @@ def get_package_list(keep):
     return filter(lambda pkg: pkg[1] not in keep, packages)
 
 
-def get_info(softwarename):
-    subp = subprocess.run(["pacman", "-Qi", softwarename], capture_output=True)
+@lru_cache()
+def get_info(softwarename, size=40):
+    env = os.environ.copy()
+    env["COLUMNS"] = str(size)
+    subp = subprocess.run(["pacman", "-Qi", softwarename], capture_output=True, env=env)
     return subp.stdout
 
 
@@ -51,10 +56,13 @@ class Tui:
             button.connect_signal(self.mark_for_deletion)
             body.append(urwid.AttrMap(button, None, focus_map="reversed"))
         self.list = urwid.ListBox(urwid.SimpleFocusListWalker(body))
-        self.main = urwid.Padding(self.list, left=2, right=2)
+        self.left = urwid.Padding(self.list, left=2, right=2)
+
         self.info = urwid.Text("")
-        self.right = urwid.Filler(self.info, "top")
-        self.cols = urwid.Columns([self.main, self.right])
+        self.right = urwid.Filler(
+            urwid.Pile([urwid.Text("Package info"), urwid.Divider(), self.info]), "top",
+        )
+        self.cols = urwid.Columns([self.left, self.right])
         self.loop = urwid.MainLoop(
             self.cols, palette=self.palette, unhandled_input=self.handle_input
         )
@@ -66,12 +74,13 @@ class Tui:
         wrapper(self.__run__)
 
     def get_selected(self):
-        return self.main.base_widget.get_focus_widgets()[0].base_widget
+        return self.left.base_widget.get_focus_widgets()[0]
 
     def get_selected_pkg(self):
-        return self.get_selected().pkgName
+        return self.get_selected().base_widget.pkgName
 
-    def show_text(self, text):
+    def show_info(self, pkg):
+        text = get_info(pkg, get_terminal_size().columns // 2)
         self.info.set_text(text)
 
     def exit(self):
@@ -84,8 +93,13 @@ class Tui:
         button = tui.get_selected()
         name = tui.get_selected_pkg()
         if key == "right":
-            self.show_text(get_info(name))
+            self.show_info(name)
         elif key == "h":
+            self.hide(button, name)
+        elif key == "k":
+            self.mark_as_keep(button, name)
+        elif key == "K":
+            self.keep.append(name)
             self.hide(button, name)
 
     def toggle_state(self, button, name, stateset, state):
@@ -96,8 +110,11 @@ class Tui:
             stateset.append(name)
             button.set_state(state)
 
+    def mark_as_keep(self, button, name):
+        self.toggle_state(button.base_widget, name, self.keep, "keep")
+
     def hide(self, button, name):
-        self.toggle_state(button, name, self.keep, "keep")
+        self.list.body.remove(button)
 
     def mark_for_deletion(self, button, name):
         self.toggle_state(button, name, self.to_remove, "rm")
