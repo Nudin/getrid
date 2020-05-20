@@ -15,13 +15,13 @@ VERSION = 0.1
 HELP_TEXT = f"""
 {NAME} {VERSION}
 
-- Press <Enter> or <Space> to mark a package for deletion
-- Press 't' to temporally hide a package
-- Press 'k' to hide a package also in future calls of {NAME}
-- Press 'h' to show/hide all hidden packages
+- Press <Enter>, <Space> or 'd' to mark a package for deletion
+- Press 't' to temporally hide (keep) a package
+- Press 'e' to hide (keep) a package also in future calls of {NAME}
+- Press 's' to show/hide all hidden packages
+- Pressing the same key again will unset the status.
 
-Pressing the same key again will remove the status.
-
+- Use j/k, arrow keys or the mouse for movements.
 - Press q to exit.
 """
 
@@ -126,6 +126,20 @@ class Tui:
             return self.get_selected().text
         return self.get_selected().base_widget.pkgName
 
+    def up(self):
+        focus = self.left.base_widget.focus_position
+        if focus <= 2:
+            return
+        self.left.base_widget.set_focus(focus - 1)
+
+    def down(self):
+        focus = self.left.base_widget.focus_position
+        try:
+            self.left.base_widget.set_focus(focus + 1)
+        except IndexError:
+            # We are already at the lowest entry
+            pass
+
     def show_info(self, pkg):
         text = get_info(pkg, get_terminal_size().columns // 2)
         self.info.set_text(text)
@@ -154,10 +168,19 @@ class Tui:
         elif key == "t":
             self.toggle_to_keep_for_now(button, name)
         # Keep "forever"
-        elif key == "k":
+        elif key == "e":
             self.toggle_to_keep(button, name)
-        elif key == "h":
+        # Delete
+        elif key == "d":
+            self.toggle_to_remove(button, name)
+        # show/hide packages that will be kept
+        elif key == "s":
             self.toggle_hidden()
+        # Vim-movements
+        elif key == "j":
+            self.down()
+        elif key == "k":
+            self.up()
 
     def toggle_hidden(self):
         if self.hidden:

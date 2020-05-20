@@ -6,8 +6,8 @@ lengthy and risky upgrades or fresh installs every X months/years.  The
 downside of this is that there are never any "clear cuts" and the amounts of
 packages once installed but not needed anymore constantly grows.
 
-Removing old packages is annoying, so I wrote `getrig` a tool that makes it to
-Find packages that unnecessary fill up your disk. A terminal user interface
-allows you too decide which packages to keep and which to remove.
+Removing old packages is annoying, so I wrote `getrid` a tool that makes it to
+find packages that unnecessary fill up your disk. A terminal user interface
+allows you to decide which packages to keep and which to remove.
 
 Dependencies: python, pacgraph, urwid
