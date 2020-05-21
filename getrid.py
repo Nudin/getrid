@@ -11,7 +11,7 @@ import urwid
 from pacgraph import Arch, human_si, packs_by_size, toplevel_packs
 
 NAME = "getrid"
-VERSION = 0.1
+VERSION = 0.2
 HELP_TEXT = f"""
 {NAME} {VERSION}
 
@@ -64,6 +64,11 @@ class Tui:
     to_remove = []
     to_keep = []
     to_keep_for_now = []
+    storage_counter = {
+        States.TO_REMOVE: 0,
+        States.TO_KEEP: 0,
+        States.TO_KEEP_FOR_NOW: 0,
+    }
     hidden = True
     palette = [
         ("reversed", "standout", "default"),
@@ -75,8 +80,8 @@ class Tui:
     def __init__(self, to_keep=[]):
         self.to_keep = to_keep
         body = [urwid.Text("Packages"), urwid.Divider()]
-        packages = get_package_list()
-        for pkg in packages:
+        self.packages = get_package_list()
+        for pkg in self.packages:
             button = PkgButton(pkg)
             button.connect_signal(self.toggle_to_remove)
             body.append(urwid.AttrMap(button, None, focus_map="reversed"))
@@ -87,12 +92,15 @@ class Tui:
         self.backup = copy.copy(self.list.body)
         self.left = urwid.Padding(self.list, left=2, right=2)
 
-        self.info = urwid.Text("")
         self.help = urwid.Text(HELP_TEXT)
+        self.stats = urwid.Text("")
+        self.info = urwid.Text("")
         self.right = urwid.Filler(
             urwid.Pile(
                 [
                     self.help,
+                    urwid.Divider("-"),
+                    self.stats,
                     urwid.Divider("-"),
                     urwid.Text("Package info"),
                     urwid.Divider(),
@@ -104,8 +112,9 @@ class Tui:
         self.cols = urwid.Columns([self.left, self.right])
         urwid.connect_signal(focuswalker, "modified", self.handle_input)
 
-        # Hide the elements from to_keep
+        # Hide the elements from to_keep and initialise stats
         self.hide_all()
+        self.show_stats()
 
         # Start the MainLoop
         self.loop = urwid.MainLoop(
@@ -124,7 +133,7 @@ class Tui:
     def get_selected_pkg(self):
         if type(self.get_selected()) == urwid.widget.Text:
             return self.get_selected().text
-        return self.get_selected().base_widget.pkgName
+        return self.get_selected().base_widget
 
     def up(self):
         focus = self.left.base_widget.focus_position
@@ -144,6 +153,18 @@ class Tui:
         text = get_info(pkg, get_terminal_size().columns // 2)
         self.info.set_text(text)
 
+    def show_stats(self):
+        self.stats.set_text(
+            f"""Statics:
+Number removable packages: {len(self.packages)}
+Number packages marked for deletion: {len(self.to_remove)}
+Number packages marked to keep: {len(self.to_keep)}
+Number packages marked to keep for now: {len(self.to_keep_for_now)}
+
+Space being freed: >={human_si(self.storage_counter[States.TO_REMOVE])}
+            """
+        )
+
     def exit(self):
         raise urwid.ExitMainLoop()
 
@@ -155,14 +176,12 @@ class Tui:
         # Doesn't matter, just ignore it
         try:
             button = self.get_selected()
-            name = self.get_selected_pkg()
+            name = self.get_selected_pkg().pkgName
         except AttributeError:
             return
 
+        # On every movement: show package info
         if key is None:
-            self.show_info(name)
-        # right: show package info
-        if key == "right":
             self.show_info(name)
         # Keep for this runtime
         elif key == "t":
@@ -213,17 +232,22 @@ class Tui:
         if name in stateset:
             stateset.remove(name)
             button.set_state()
+            self.storage_counter[state] -= button.base_widget.pkgSize
         else:
             if name in self.to_keep:
-                self.to_keep.remove(name)
+                self.toggle_state(button, name, self.to_keep, States.TO_KEEP)
             if name in self.to_keep_for_now:
-                self.to_keep_for_now.remove(name)
+                self.toggle_state(
+                    button, name, self.to_keep_for_now, States.TO_KEEP_FOR_NOW
+                )
             if name in self.to_remove:
-                self.to_remove.remove(name)
+                self.toggle_state(button, name, self.to_remove, States.TO_REMOVE)
             stateset.append(name)
             button.set_state(state)
+            self.storage_counter[state] += button.base_widget.pkgSize
         if self.hidden:
             self.hide_all()
+        self.show_stats()
 
     def toggle_to_keep_for_now(self, button, name):
         self.toggle_state(
