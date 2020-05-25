@@ -1,0 +1,1 @@
+<html><body>You are being <a href="https://raw.githubusercontent.com/IQAndreas/markdown-licenses/master/gnu-lgpl-v3.0.md">redirected</a>.</body></html>
