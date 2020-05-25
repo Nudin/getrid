@@ -11,7 +11,7 @@ easier to find packages that unnecessary fill up your disk. It's a simple
 terminal user interface allows you to decide which packages to keep and which
 to remove.
 
-Dependencies: python, pacgraph, urwid
+Dependencies: python, pacgraph, python-urwid
 
 ## How to use?
 It list you all packages that can be removed (are not a dependency of other
