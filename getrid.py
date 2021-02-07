@@ -179,6 +179,8 @@ Space being freed: >={human_si(self.storage_counter[States.TO_REMOVE])}
             name = self.get_selected_pkg().pkgName
         except AttributeError:
             return
+        except IndexError:
+            return
 
         # On every movement: show package info
         if key is None:
