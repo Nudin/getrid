@@ -11,7 +11,7 @@ import urwid
 from pacgraph import Arch, human_si, packs_by_size, toplevel_packs
 
 NAME = "getrid"
-VERSION = 0.2
+VERSION = "0.2.1"
 HELP_TEXT = f"""
 {NAME} {VERSION}
 
