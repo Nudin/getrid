@@ -1,5 +1,6 @@
 # Maintainer: Michael Schönitzer <michael@schoenitzer.de>
 pkgname=getrid-git
+pkgver=0.2.2
 pkgrel=3
 pkgdesc="Terminal user interface to decide which packages to keep and which to get rid of"
 arch=('any')

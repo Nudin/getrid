@@ -7,11 +7,12 @@ from functools import lru_cache
 from shutil import get_terminal_size
 
 import urwid
+import urwid.decoration
 
 from pacgraph import Arch, human_si, packs_by_size, toplevel_packs
 
 NAME = "getrid"
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 HELP_TEXT = f"""
 {NAME} {VERSION}
 
