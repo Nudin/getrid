@@ -2,6 +2,7 @@
 import copy
 import os
 import subprocess
+import sys
 from curses import wrapper
 from functools import lru_cache
 from shutil import get_terminal_size
@@ -33,6 +34,12 @@ class States:
     TO_REMOVE = "to_remove"
 
 
+def get_aur_package_list():
+    p = subprocess.run(["pacman", "-Qm"], capture_output=True)
+    aur_pkgs = [l.split()[0] for l in p.stdout.decode().splitlines()]
+    return aur_pkgs
+
+
 def get_package_list():
     tree = Arch().local_load()
     packages = packs_by_size(tree, toplevel_packs(tree))
@@ -48,10 +55,13 @@ def get_info(softwarename, size=40):
 
 
 class PkgButton(urwid.Button):
-    def __init__(self, package):
+    def __init__(self, package, aur=False):
         self.pkgSize = package[0]
         self.pkgName = package[1]
+        self.aur = aur
         label = "{} {}".format(human_si(self.pkgSize), self.pkgName)
+        if aur:
+            label += " [AUR]"
         super().__init__(label)
 
     def connect_signal(self, call):
@@ -82,8 +92,9 @@ class Tui:
         self.to_keep = to_keep
         body = [urwid.Text("Packages"), urwid.Divider()]
         self.packages = get_package_list()
+        local_pkgs = get_aur_package_list()
         for pkg in self.packages:
-            button = PkgButton(pkg)
+            button = PkgButton(pkg, aur=pkg[1] in local_pkgs)
             button.connect_signal(self.toggle_to_remove)
             body.append(urwid.AttrMap(button, None, focus_map="reversed"))
             if pkg[1] in self.to_keep:
