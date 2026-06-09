@@ -2,7 +2,6 @@
 import copy
 import os
 import subprocess
-import sys
 from curses import wrapper
 from functools import lru_cache
 from shutil import get_terminal_size
@@ -12,7 +11,7 @@ import urwid
 from pacgraph import Arch, human_si, packs_by_size, toplevel_packs
 
 NAME = "getrid"
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 HELP_TEXT = f"""
 {NAME} {VERSION}
 
@@ -34,7 +33,7 @@ class States:
 
 
 def get_aur_package_list():
-    p = subprocess.run(["pacman", "-Qm"], capture_output=True)
+    p = subprocess.run(["pacman", "-Qm"], capture_output=True, check=True)
     aur_pkgs = [l.split()[0] for l in p.stdout.decode().splitlines()]
     return aur_pkgs
 
@@ -49,7 +48,9 @@ def get_package_list():
 def get_info(softwarename, size=40):
     env = os.environ.copy()
     env["COLUMNS"] = str(size)
-    subp = subprocess.run(["pacman", "-Qi", softwarename], capture_output=True, env=env)
+    subp = subprocess.run(
+        ["pacman", "-Qi", softwarename], capture_output=True, env=env, check=True
+    )
     return subp.stdout
 
 
@@ -58,7 +59,7 @@ class PkgButton(urwid.Button):
         self.pkgSize = package[0]
         self.pkgName = package[1]
         self.aur = aur
-        label = "{} {}".format(human_si(self.pkgSize), self.pkgName)
+        label = f"{human_si(self.pkgSize)} {self.pkgName}"
         if aur:
             label += " [AUR]"
         super().__init__(label)
@@ -142,7 +143,7 @@ class Tui:
         return self.left.base_widget.get_focus_widgets()[0]
 
     def get_selected_pkg(self):
-        if type(self.get_selected()) == urwid.widget.Text:
+        if isinstance(self.get_selected(), urwid.widget.Text):
             return self.get_selected().text
         return self.get_selected().base_widget
 
@@ -165,16 +166,14 @@ class Tui:
         self.info.set_text(text)
 
     def show_stats(self):
-        self.stats.set_text(
-            f"""Statics:
+        self.stats.set_text(f"""Statics:
 Number removable packages: {len(self.packages)}
 Number packages marked for deletion: {len(self.to_remove)}
 Number packages marked to keep: {len(self.to_keep)}
 Number packages marked to keep for now: {len(self.to_keep_for_now)}
 
 Space being freed: >={human_si(self.storage_counter[States.TO_REMOVE])}
-            """
-        )
+            """)
 
     def exit(self):
         raise urwid.ExitMainLoop()
@@ -225,7 +224,7 @@ Space being freed: >={human_si(self.storage_counter[States.TO_REMOVE])}
         # self.list.body is subtype of MonitoredList: removing an element will
         # skip the next element in the iterator, therefore we have to loop twice
         for button in self.list.body:
-            if type(button) != urwid.widget.attr_map.AttrMap:
+            if not isinstance(button, urwid.widget.attr_map.AttrMap):
                 continue
             name = button.base_widget.pkgName
             if name in self.to_keep or name in self.to_keep_for_now:
@@ -281,7 +280,7 @@ if __name__ == "__main__":
         home = os.path.expanduser("~")
         conf_file = os.path.join(home, f".{NAME}")
     try:
-        with open(conf_file) as file:
+        with open(conf_file, encoding="UTF-8") as file:
             keep = file.readlines()
             keep = [x.strip() for x in keep]
     except OSError:
@@ -290,7 +289,7 @@ if __name__ == "__main__":
     tui = Tui(keep)
     tui.run()
 
-    with open(conf_file, "w") as file:
+    with open(conf_file, "w", encoding="UTF-8") as file:
         file.write("\n".join(tui.to_keep))
 
     if len(tui.to_remove) > 0:
@@ -298,6 +297,6 @@ if __name__ == "__main__":
         print("Selected for removal: " + " ".join(tui.to_remove))
         if input("Remove packages? [y/N] ").lower() == "y":
             if os.geteuid() != 0:
-                subprocess.run(["sudo", "pacman", "-Rs", *tui.to_remove])
+                subprocess.run(["sudo", "pacman", "-Rs", *tui.to_remove], check=True)
             else:
-                subprocess.run(["pacman", "-Rs", *tui.to_remove])
+                subprocess.run(["pacman", "-Rs", *tui.to_remove], check=True)
