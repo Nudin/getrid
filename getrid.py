@@ -8,7 +8,6 @@ from functools import lru_cache
 from shutil import get_terminal_size
 
 import urwid
-import urwid.decoration
 
 from pacgraph import Arch, human_si, packs_by_size, toplevel_packs
 
@@ -226,7 +225,7 @@ Space being freed: >={human_si(self.storage_counter[States.TO_REMOVE])}
         # self.list.body is subtype of MonitoredList: removing an element will
         # skip the next element in the iterator, therefore we have to loop twice
         for button in self.list.body:
-            if type(button) != urwid.decoration.AttrMap:
+            if type(button) != urwid.widget.attr_map.AttrMap:
                 continue
             name = button.base_widget.pkgName
             if name in self.to_keep or name in self.to_keep_for_now:
